@@ -1,4 +1,6 @@
 <!DOCTYPE html>
+<!-- v2.38: Google Earth Pro-style image-overlay placement editor (move / stretch / skew / rotate handles, transparency slider, N/S/E/W/rotation fields), KMZ export of adjusted GroundOverlays at original resolution. -->
+<!-- v2.37: Large KMZ/KML images (tested with a 29.7 MB, 6157x7822 PNG GroundOverlay) now load at full resolution onto the mesh. Old 20 MB per-image / 100 MB total import caps raised; ground overlays keep the original image (blob URL, alpha preserved) instead of the 1280 px JPEG gallery preview; texture upload is clamped to the GPU MAX_TEXTURE_SIZE and reports errors. -->
 <!-- v2.29: Load embedded KMZ images, resolve internal archive paths, support KML GroundOverlay/PhotoOverlay and archive gallery. -->
 <!-- Auto-Detect: the Point Compare detector was replaced by the oriented-line / closed-depression detector -->
 <html lang="en">
@@ -6,7 +8,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NS LiDAR Micro-Topography Viewer v2.36 — Expanded Sun & Hillshade Controls</title>
+<title>NS LiDAR Micro-Topography Viewer v2.38 — Expanded Sun & Hillshade Controls</title>
 <style>
 
 :root {
@@ -482,6 +484,42 @@ kbd {
 .vhandle.drag { background: #ffd24a; cursor: grabbing; border-color: #fff; }
 .vhandle.start { border-radius: 4px; border-color: #7cf35c; }
 body.editing #gl { cursor: crosshair; }
+
+/* ---- v2.38: image-overlay placement editor (Google Earth Pro-style green handles) ---- */
+#imgp-svg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 54; pointer-events: none; overflow: visible; }
+#imgp-svg path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+#imgp-svg .imgp-halo { stroke: rgba(0,0,0,.65); stroke-width: 5; }
+#imgp-svg .imgp-line { stroke: #19ff6a; stroke-width: 2.4; }
+#imgp-svg .imgp-outline { stroke: #19ff6a; stroke-width: 1; opacity: .6; stroke-dasharray: 6 5; }
+#imgp-svg .imgp-diamond { fill: rgba(25,255,106,.12); }
+#imgp-layer { position: fixed; inset: 0; z-index: 56; pointer-events: none; }
+.imgp-h { position: absolute; left: 0; top: 0; width: 28px; height: 28px; margin: -14px 0 0 -14px; border-radius: 50%;
+  pointer-events: auto; touch-action: none; cursor: pointer; display: none; }
+.imgp-h:hover, .imgp-h.drag { background: rgba(25,255,106,.25); box-shadow: 0 0 0 1.5px #19ff6a; }
+.imgp-h[data-k="center"] { cursor: move; }
+.imgp-h[data-k="rot"] { cursor: grab; }
+.imgp-h.drag { cursor: grabbing; }
+#imgp-panel { position: fixed; right: 16px; top: 84px; z-index: 230; width: 300px; display: none; flex-direction: column;
+  background: rgba(13,20,29,.97); border: 1px solid #3a526d; border-radius: 12px; box-shadow: 0 14px 40px rgba(0,0,0,.55); backdrop-filter: blur(8px); }
+#imgp-panel.open { display: flex; }
+#imgp-head { display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; background: #172333; border-bottom: 1px solid #2a3a4d;
+  border-radius: 12px 12px 0 0; cursor: move; touch-action: none; }
+#imgp-title { flex: 1; font-weight: 650; font-size: 13px; color: #f1f6fb; }
+#imgp-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 9px; font-size: 12px; }
+#imgp-name { color: #cfe0f0; font-weight: 600; overflow-wrap: anywhere; }
+#imgp-info { color: var(--dim); font-size: 11px; }
+.imgp-trow { display: flex; align-items: center; gap: 6px; }
+.imgp-trow input[type=range] { flex: 1; min-width: 0; accent-color: #19ff6a; }
+.imgp-trow small { color: var(--dim); font-size: 10.5px; }
+#imgp-opacity-val { width: 34px; text-align: right; font: 11px Consolas, monospace; color: #d7e1ec; }
+.imgp-grid { display: grid; grid-template-columns: 62px 1fr; gap: 5px 8px; align-items: center; }
+.imgp-grid label { color: var(--dim); }
+.imgp-grid input { width: 100%; background: #0b0f14; border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 4px 6px; font: 11.5px Consolas, monospace; user-select: text; }
+.imgp-grid input:focus { outline: 1px solid #19ff6a; }
+.imgp-btns { display: flex; gap: 6px; }
+.imgp-btns .btn { flex: 1; }
+#imgp-hint { color: #8fa1b5; font-size: 11px; line-height: 1.5; }
+#imgp-hint b { color: #19ff6a; font-weight: 600; }
 
 /* ---- editor toolbar ---- */
 #editbar {
@@ -992,6 +1030,30 @@ body.editing #gl { cursor: crosshair; }
     <button class="btn small accent" id="edit-done" title="Finish (Enter)">✓ Done</button>
     <button class="btn small danger" id="edit-del" title="Delete this feature">🗑 Delete</button>
     <button class="btn small" id="edit-cancel" title="Cancel (Esc)">✕ Cancel</button>
+  </div>
+</div>
+
+<!-- ============ v2.38: image overlay placement panel ============ -->
+<div id="imgp-panel" role="dialog" aria-label="Edit image overlay">
+  <div id="imgp-head"><span id="imgp-title">Edit Image Overlay</span><button class="btn small" id="imgp-x" title="Cancel (Esc)" aria-label="Cancel">✕</button></div>
+  <div id="imgp-body">
+    <div id="imgp-name"></div>
+    <div id="imgp-info"></div>
+    <div class="imgp-trow"><small>Transparent</small><input type="range" id="imgp-opacity" min="0" max="100" step="1" value="100" aria-label="Image transparency"><small>Opaque</small><span id="imgp-opacity-val">100%</span></div>
+    <div class="imgp-grid">
+      <label for="imgp-n">North</label><input id="imgp-n" type="number" step="any">
+      <label for="imgp-s">South</label><input id="imgp-s" type="number" step="any">
+      <label for="imgp-e">East</label><input id="imgp-e" type="number" step="any">
+      <label for="imgp-w">West</label><input id="imgp-w" type="number" step="any">
+      <label for="imgp-rot">Rotation °</label><input id="imgp-rot" type="number" step="any">
+    </div>
+    <label class="chk"><input type="checkbox" id="imgp-keep"> Keep proportions when dragging a corner</label>
+    <div class="imgp-btns">
+      <button class="btn small" id="imgp-reset" title="Return to the placement from when this panel opened">↺ Reset</button>
+      <button class="btn small accent" id="imgp-ok" title="Keep this placement (Enter)">✓ OK</button>
+      <button class="btn small" id="imgp-cancel" title="Discard changes (Esc)">Cancel</button>
+    </div>
+    <div id="imgp-hint"><b>Centre cross</b> moves · <b>edge marks</b> stretch one side · <b>corners</b> stretch both ways · <b>◇ diamond</b> rotates.<br><b>Shift</b> = scale from centre (Shift while rotating = 5° steps) · <b>Ctrl/⌘ + corner</b> = move just that corner (skew). Drag the terrain as usual to move the camera; use the slider to compare with the LiDAR underneath. Fields are lat/lon degrees, as in Google Earth's Location tab.</div>
   </div>
 </div>
 
@@ -4876,6 +4938,11 @@ Renderer.prototype.buildGroundImageGeometry = function (f, cache) {
     minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]);
     minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]);
   });
+  if (cache.pad) {   // v2.38: while the placement editor is open, index a padded area so dragging only has to move the corners
+    var padM = 0.25 * Math.max(maxX - minX, maxY - minY);
+    minX -= padM; maxX += padM; minY -= padM; maxY += padM;
+  }
+  cache.cover = { minX: minX, maxX: maxX, minY: minY, maxY: maxY };
   var uVec = [corners[1][0] - corners[0][0], corners[1][1] - corners[0][1]];
   var vVec = [corners[3][0] - corners[0][0], corners[3][1] - corners[0][1]];
   var det = uVec[0] * vVec[1] - uVec[1] * vVec[0];
@@ -4960,7 +5027,7 @@ Renderer.prototype.drawGroundImageOverlays = function (mv, proj) {
   if (!this.terrainVbo || !this.terrainIbo || !this.terrainGrid) return;
   FEATS.forEach(function (f) {
     if (!f.vis || !f.groundImageOverlay || !f.photos || !f.photos.length || !f.photos[0].src || f.xy.length < 4) return;
-    var src = f.photos[0].src;
+    var src = f.photos[0].fullSrc || f.photos[0].src;   // v2.37: original-resolution image when available
     var cache = self.groundImageCache.find(function (c) { return c.feature === f; });
     if (cache && cache.src !== src) {
       if (cache.texture) gl.deleteTexture(cache.texture);
@@ -4973,28 +5040,67 @@ Renderer.prototype.drawGroundImageOverlays = function (mv, proj) {
       cache = { feature: f, src: src, ready: false, loading: true, texture: null, vbo: null, ibo: null, indexCount: 0, terrainGrid: null };
       self.groundImageCache.push(cache);
       var img = new Image();
-      img.onload = function () {
+      var fail = function (msg) {
+        cache.loading = false; cache.error = msg;
+        if (typeof toast === 'function') toast((f.name || 'Ground image') + ': ' + msg);
+      };
+      var upload = function () {
         try {
+          var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+          if (!nw || !nh) { fail('Image has no pixels'); return; }
+          // v2.37: stay inside the GPU's texture limit (and a ~100 Mpx memory budget); downscale only if needed.
+          var maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE) || 4096, 16384);
+          var scale = Math.min(1, maxTex / Math.max(nw, nh), Math.sqrt(100e6 / (nw * nh)));
+          var source = img, tw = nw, th = nh;
+          if (scale < 1) {
+            tw = Math.max(1, Math.floor(nw * scale)); th = Math.max(1, Math.floor(nh * scale));
+            var cv = document.createElement('canvas'); cv.width = tw; cv.height = th;
+            var cx = cv.getContext('2d'); cx.imageSmoothingEnabled = true; cx.imageSmoothingQuality = 'high';
+            cx.drawImage(img, 0, 0, tw, th); source = cv;
+          }
+          while (gl.getError() !== gl.NO_ERROR) {}   // clear stale errors
           var tex = gl.createTexture();
           gl.bindTexture(gl.TEXTURE_2D, tex);
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);          // v=0 (south edge) -> bottom row of the image
           gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
-          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, img);
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
           gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+          var upErr = gl.getError();
+          if (upErr !== gl.NO_ERROR) { gl.deleteTexture(tex); fail('GPU could not allocate a ' + tw + '×' + th + ' texture (GL error ' + upErr + ')'); return; }
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
           gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+          var aniso = gl.getExtension('EXT_texture_filter_anisotropic');
+          if (aniso) gl.texParameterf(gl.TEXTURE_2D, aniso.TEXTURE_MAX_ANISOTROPY_EXT, Math.min(8, gl.getParameter(aniso.MAX_TEXTURE_MAX_ANISOTROPY_EXT) || 1));
           gl.generateMipmap(gl.TEXTURE_2D);
           cache.texture = tex; cache.ready = true; cache.loading = false;
-        } catch (e) { cache.loading = false; cache.error = String(e); }
+          cache.texW = tw; cache.texH = th;
+          if (typeof toast === 'function') toast((f.name || 'Ground image') + ': ' + nw + '×' + nh + ' image on mesh' + (scale < 1 ? ' (downscaled to ' + tw + '×' + th + ' for this GPU)' : ' at full resolution'));
+        } catch (e) { fail(String(e && e.message ? e.message : e)); }
       };
-      img.onerror = function () { cache.loading = false; cache.error = 'Image could not be decoded'; };
+      img.onload = function () {
+        if (img.decode) img.decode().then(upload, upload);   // decode off the upload path so large PNGs do not stall the frame
+        else upload();
+      };
+      img.onerror = function () { fail('Image could not be decoded'); };
       img.src = src;
     }
     if (!cache.ready || !cache.texture) return;
     var xyKey = f.xy.slice(0, 4).map(function (p) { return p[0] + ',' + p[1]; }).join('|');
-    if (!cache.ibo || cache.terrainGrid !== self.terrainGrid || cache.gridKey !== self.terrainGrid.baseKey || cache.xyKey !== xyKey) {
+    var needGeom = !cache.ibo || cache.terrainGrid !== self.terrainGrid || cache.gridKey !== self.terrainGrid.baseKey;
+    if (!needGeom && cache.xyKey !== xyKey) {
+      // v2.38: if the moved image still lies inside the already-indexed (padded) area, just update its corners
+      var bx0 = Infinity, bx1 = -Infinity, by0 = Infinity, by1 = -Infinity;
+      f.xy.slice(0, 4).forEach(function (q) { bx0 = Math.min(bx0, q[0]); bx1 = Math.max(bx1, q[0]); by0 = Math.min(by0, q[1]); by1 = Math.max(by1, q[1]); });
+      var cv = cache.cover;
+      if (cv && bx0 >= cv.minX && bx1 <= cv.maxX && by0 >= cv.minY && by1 <= cv.maxY) {
+        cache.xyKey = xyKey;
+        cache.imageCorners = f.xy.slice(0, 4).map(function (q) { return [q[0] - store.aoiX0, q[1] - store.aoiY0]; });
+      } else needGeom = true;
+    }
+    if (needGeom) {
+      cache.pad = (typeof IMGP !== 'undefined' && IMGP.feat === f) ? 1 : 0;
       try { self.buildGroundImageGeometry(f, cache); } catch (e) { cache.error = String(e); return; }
     }
     if (!cache.indexCount) return;
@@ -5004,7 +5110,7 @@ Renderer.prototype.drawGroundImageOverlays = function (mv, proj) {
     gl.uniform1f(gl.getUniformLocation(p, 'uExag'), S.exag);
     gl.uniform1f(gl.getUniformLocation(p, 'uZMid'), (store.zRange[0] + store.zRange[1]) / 2);
     gl.uniform1f(gl.getUniformLocation(p, 'uLift'), 0.08);   // 8 cm above the exact same terrain triangles
-    gl.uniform1f(gl.getUniformLocation(p, 'uOpacity'), 1.0);
+    gl.uniform1f(gl.getUniformLocation(p, 'uOpacity'), (f.imageOpacity != null && isFinite(f.imageOpacity)) ? Math.max(0, Math.min(1, f.imageOpacity)) : 1.0);
     var c = cache.imageCorners;
     gl.uniform2f(gl.getUniformLocation(p, 'uImageA'), c[0][0], c[0][1]);
     gl.uniform2f(gl.getUniformLocation(p, 'uImageB'), c[1][0], c[1][1]);
@@ -5846,9 +5952,37 @@ function photoPathKeys(value) {
   var full = normalizePhotoPath(value), base = full.split('/').pop();
   return full === base ? [full] : [full, base];
 }
+/* v2.37: import limits (raise further here if a KMZ carries even larger imagery). */
+var PHOTO_MAX_BYTES = 256 * 1024 * 1024;          // one image, uncompressed bytes
+var KMZ_MAX_TOTAL_IMAGE_BYTES = 1024 * 1024 * 1024; // all images in one KMZ
+var KMZ_MAX_IMAGE_COUNT = 200;
+/* v2.37: returns { src: 1280px JPEG data URL (gallery / autosave / export),
+   fullSrc: blob URL of the ORIGINAL bytes (used for GroundOverlay mesh texture, keeps alpha),
+   fullW, fullH: original pixel size }. */
+function photoBlobToAsset(blob) {
+  return new Promise(function (resolve, reject) {
+    if (!blob || !blob.size) { reject(new Error('photo is empty')); return; }
+    if (blob.size > PHOTO_MAX_BYTES) { reject(new Error('photo is larger than ' + Math.round(PHOTO_MAX_BYTES / 1048576) + ' MB')); return; }
+    var objectUrl = URL.createObjectURL(blob), img = new Image();
+    img.onload = function () {
+      try {
+        var nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
+        var scale = Math.min(1, 1280 / Math.max(nw, nh));
+        var w = Math.max(1, Math.round(nw * scale)), h = Math.max(1, Math.round(nh * scale));
+        var canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+        var ctx = canvas.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); ctx.drawImage(img, 0, 0, w, h);
+        var preview = canvas.toDataURL('image/jpeg', 0.78);
+        canvas.width = canvas.height = 1;
+        resolve({ src: preview, fullSrc: objectUrl, fullW: nw, fullH: nh, fullBlob: blob });   // objectUrl stays alive for the mesh texture
+      } catch (err) { URL.revokeObjectURL(objectUrl); reject(err); }
+    };
+    img.onerror = function () { URL.revokeObjectURL(objectUrl); reject(new Error('unsupported or damaged image')); };
+    img.src = objectUrl;
+  });
+}
 function photoBlobToDataUrl(blob) {
   return new Promise(function (resolve, reject) {
-    if (!blob || !blob.size || blob.size > 20 * 1024 * 1024) { reject(new Error('photo is empty or larger than 20 MB')); return; }
+    if (!blob || !blob.size || blob.size > PHOTO_MAX_BYTES) { reject(new Error('photo is empty or larger than ' + Math.round(PHOTO_MAX_BYTES / 1048576) + ' MB')); return; }
     var objectUrl = URL.createObjectURL(blob), img = new Image();
     img.onload = function () {
       try {
@@ -5868,9 +6002,9 @@ function photoBlobToDataUrl(blob) {
 function photoAssetsFromFiles(files) {
   var assets = Object.create(null);
   return Promise.all((files || []).map(function (file) {
-    return photoBlobToDataUrl(file).then(function (src) {
+    return photoBlobToAsset(file).then(function (asset) {
       var name = String(file.name || 'photo.jpg'), keys = photoPathKeys(name);
-      var photo = { src: src, name: name, type: 'image/jpeg' };
+      var photo = { src: asset.src, fullSrc: asset.fullSrc, fullW: asset.fullW, fullH: asset.fullH, fullBlob: asset.fullBlob, name: name, type: 'image/jpeg' };
       keys.forEach(function (key) { assets[key] = photo; });
     }).catch(function (err) { toast(file.name + ': ' + (err.message || 'could not read photo')); });
   })).then(function () { return assets; });
@@ -5902,6 +6036,7 @@ function resolveFeaturePhotoAssets(features, assets, kmlPath) {
       for (var i = 0; i < keys.length && !found; i++) found = assets[keys[i]];
       if (found && found.src) {
         photo.src = found.src;
+        if (found.fullSrc) { photo.fullSrc = found.fullSrc; photo.fullW = found.fullW; photo.fullH = found.fullH; photo.fullBlob = found.fullBlob; }
         photo.name = photo.name || found.name || href.split('/').pop();
         photo.type = photo.type || found.type || imageMimeFromName(href);
         kept.push(photo); stats.resolved++;
@@ -5929,6 +6064,7 @@ function mergeImportedFeatures(got, filename, importInfo) {
   if (importInfo && importInfo.archiveImageCount) msg += ' · ' + importInfo.archiveImageCount + ' embedded KMZ image' + (importInfo.archiveImageCount === 1 ? '' : 's') + ' extracted';
   if (importInfo && importInfo.unresolved) msg += ' · ' + importInfo.unresolved + ' image reference' + (importInfo.unresolved === 1 ? '' : 's') + ' not found';
   if (importInfo && importInfo.skipped) msg += ' · ' + importInfo.skipped + ' archive image' + (importInfo.skipped === 1 ? '' : 's') + ' skipped (size/format limit)';
+  if (got.some(function (f) { return f.groundImageOverlay; })) msg += ' · click 🖼 in the Features list to adjust the image placement';
   toast(msg);
 }
 function updateKmzImagesButton() {
@@ -6007,15 +6143,15 @@ function unzipKmzArchive(buf) {
   // Keep the import bounded without silently discarding every image when a KMZ is larger than the old global limit.
   var selectedImages = [], totalBytes = 0, skippedImages = 0;
   imageEntries.forEach(function (entry) {
-    if (entry.usize > 20 * 1024 * 1024 || totalBytes + entry.usize > 100 * 1024 * 1024 || selectedImages.length >= 120) skippedImages++;
+    if (entry.usize > PHOTO_MAX_BYTES || totalBytes + entry.usize > KMZ_MAX_TOTAL_IMAGE_BYTES || selectedImages.length >= KMZ_MAX_IMAGE_COUNT) skippedImages++;
     else { selectedImages.push(entry); totalBytes += entry.usize; }
   });
   return Promise.all([extract(kmlEntry), Promise.all(selectedImages.map(function (entry) {
     return extract(entry).then(function (bytes) {
-      return photoBlobToDataUrl(new Blob([bytes], { type: imageMimeFromName(entry.name) })).then(function (src) {
-        return { name: entry.name, src: src, type: 'image/jpeg', archivePath: entry.name };
+      return photoBlobToAsset(new Blob([bytes], { type: imageMimeFromName(entry.name) })).then(function (asset) {
+        return { name: entry.name, src: asset.src, fullSrc: asset.fullSrc, fullW: asset.fullW, fullH: asset.fullH, fullBlob: asset.fullBlob, type: 'image/jpeg', archivePath: entry.name };
       });
-    }).catch(function () { skippedImages++; return null; });
+    }).catch(function (err) { skippedImages++; if (typeof toast === 'function') toast(entry.name.split('/').pop() + ': ' + (err && err.message ? err.message : 'could not load image')); return null; });
   }))]).then(function (parts) {
     var assets = Object.create(null), photos = [];
     parts[1].forEach(function (photo, idx) {
@@ -6241,7 +6377,11 @@ function parseKmlText(txt) {
     }
     if (gXY.length >= 3) {
       if (gXY.length > 2 && (Math.abs(gXY[0][0] - gXY[gXY.length - 1][0]) > 0.01 || Math.abs(gXY[0][1] - gXY[gXY.length - 1][1]) > 0.01)) gXY.push(gXY[0].slice());
+      var gColorEl = null, gKids = ground.children;
+      for (var gk = 0; gk < gKids.length; gk++) { if ((gKids[gk].localName || gKids[gk].nodeName) === 'color') { gColorEl = gKids[gk]; break; } }
+      var gAlpha = gColorEl ? parseInt(String(gColorEl.textContent || '').trim().slice(0, 2), 16) : NaN;
       out.push({ name: gn ? gn.textContent.trim() : ('Ground image ' + (gi + 1)), kind: 'polygon', xy: gXY, vis: true, groundImageOverlay: true,
+        imageOpacity: isFinite(gAlpha) ? Math.max(0, Math.min(1, gAlpha / 255)) : undefined,
         lineColor: '#4fc3f7', fillColor: '#4fc3f7', fillOpacity: 0.12,
         photos: [{ href: gHref, name: gn ? gn.textContent.trim() : gHref.split('/').pop(), caption: 'Georeferenced KML GroundOverlay image', type: imageMimeFromName(gHref) }] });
     }
@@ -6498,6 +6638,7 @@ function buildFeaturePanel() {
     row.innerHTML = '<input type="checkbox" data-fi="' + idx + '" aria-label="Show ' + escHtml(f.name) + '"' + (f.vis ? ' checked' : '') + '>' +
       '<span class="dot" style="background:' + c + '"></span><span class="fname">' + escHtml(f.name) + '</span>' +
       '<span class="ftype">' + typeLabel + '</span><small>' + info + '</small>' + photoAction +
+      (f.groundImageOverlay ? '<span class="fact" data-act="place" title="Adjust image placement (move, stretch, rotate, transparency)" role="button" tabindex="0">🖼</span>' : '') +
       '<span class="fact" data-act="style" title="Set path, pin and area appearance" role="button" tabindex="0">🎨</span>' +
       '<span class="fact" data-act="edit" title="Edit vertices / rename" role="button" tabindex="0">✎</span>' +
       '<span class="fact" data-act="del" title="Delete feature" role="button" tabindex="0">🗑</span>';
@@ -6506,6 +6647,8 @@ function buildFeaturePanel() {
       if (ev.target.classList && ev.target.classList.contains('fact')) return;
       jumpToFeature(FEATS[idx]);
     });
+    var placeBtn = row.querySelector('[data-act="place"]');
+    if (placeBtn) placeBtn.addEventListener('click', function (ev) { ev.stopPropagation(); imgpOpen(FEATS[idx]); });
     var photoBtn = row.querySelector('[data-act="photos"]');
     if (photoBtn) { photoBtn.addEventListener('click', function (ev) { ev.stopPropagation(); openFeaturePhotos(FEATS[idx], 0); }); photoBtn.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); ev.stopPropagation(); openFeaturePhotos(FEATS[idx], 0); } }); }
     row.querySelector('[data-act="style"]').addEventListener('click', function (ev) {
@@ -6531,7 +6674,7 @@ function buildFeaturePanel() {
   });
   var hint = document.createElement('div');
   hint.className = 'note';
-  hint.textContent = 'Click a row to fly to it. Use the checkbox to show/hide, 📷 to view attached GPS photos, 🎨 for appearance, ✎ to reshape or rename, and 🗑 to delete. Search, filter and sort help manage larger site-feature collections.';
+  hint.textContent = 'Click a row to fly to it. Use the checkbox to show/hide, 📷 to view attached GPS photos, 🎨 for appearance, 🖼 to adjust the placement of an image overlay, ✎ to reshape or rename, and 🗑 to delete. Search, filter and sort help manage larger site-feature collections.';
   fl.appendChild(hint);
 }
 function updateFeatureGeometry() {
@@ -6706,7 +6849,7 @@ var FEATS_KEY = 'nslidar_feats_v2';
 var FEATURE_SAVE_ERROR_SHOWN = false;
 function featureStorageObject(f) {
   var o = { name: f.name, kind: f.kind, xy: f.xy.map(function (p) { return [+p[0], +p[1]]; }), vis: f.vis !== false };
-  ['lineColor','lineOpacity','lineWidth','fillColor','fillOpacity','markerColor','markerSymbol','markerScale','showLabel','groundImageOverlay'].forEach(function (k) {
+  ['lineColor','lineOpacity','lineWidth','fillColor','fillOpacity','markerColor','markerSymbol','markerScale','showLabel','groundImageOverlay','imageOpacity'].forEach(function (k) {
     if (f[k] !== undefined) o[k] = f[k];
   });
   if (Array.isArray(f.photos) && f.photos.length) o.photos = f.photos.slice(0, 30).map(function (photo) {
@@ -6769,7 +6912,7 @@ function loadFeats() {
         var p = f.xy[j];
         if (p && isFinite(p[0]) && isFinite(p[1])) xy.push([+p[0], +p[1]]);
       }
-      if (xy.length) { var saved = { name: f.name, kind: f.kind, xy: xy, vis: f.vis !== false }; ['lineColor','lineOpacity','lineWidth','fillColor','fillOpacity','markerColor','markerSymbol','markerScale','showLabel','groundImageOverlay'].forEach(function (k) { if (f[k] !== undefined) saved[k] = f[k]; });
+      if (xy.length) { var saved = { name: f.name, kind: f.kind, xy: xy, vis: f.vis !== false }; ['lineColor','lineOpacity','lineWidth','fillColor','fillOpacity','markerColor','markerSymbol','markerScale','showLabel','groundImageOverlay','imageOpacity'].forEach(function (k) { if (f[k] !== undefined) saved[k] = f[k]; });
       if (Array.isArray(f.photos)) saved.photos = f.photos.slice(0, 30).filter(function (ph) { return ph && (safePhotoHref(ph.src || '') || safePhotoHref(ph.href || '')); }).map(function (ph) { return { name: String(ph.name || 'Photo').slice(0, 200), caption: String(ph.caption || '').slice(0, 500), type: String(ph.type || '').slice(0, 80), src: safePhotoHref(ph.src || ''), href: safePhotoHref(ph.href || ''), xy: Array.isArray(ph.xy) ? [+ph.xy[0], +ph.xy[1]] : undefined }; });
       ok.push(saved); }
     }
@@ -6890,6 +7033,281 @@ function pickTerrain(sx, sy) {
   var tw = (a + b) / 2;
   return [store.aoiX0 + (o[0] + d[0] * tw), store.aoiY0 - (o[2] + d[2] * tw)];
 }
+/* ================= v2.38: Image overlay placement (Google Earth Pro-style) =================
+   A GroundOverlay feature keeps its four corners in f.xy[0..3] = A(bottom-left), B(bottom-right),
+   C(top-right), D(top-left) in the image's own frame (+closing point).  Every handle operation is a
+   pure transform of a snapshot of those corners taken when the drag began (imgpApply), driven by the
+   terrain point under the pointer (pickTerrain) — the same picking the path editor uses. */
+var IMGP = { feat: null, orig: null, origOpacity: undefined, origVis: true, svg: null, layer: null, handles: {}, paths: null, drag: null, keep: false };
+
+function imgpCorners(f) { return f.xy.slice(0, 4).map(function (p) { return [p[0], p[1]]; }); }
+function imgpSetCorners(f, c) {
+  f.xy.length = 0;
+  for (var i = 0; i < 4; i++) f.xy.push([c[i][0], c[i][1]]);
+  f.xy.push([c[0][0], c[0][1]]);
+  markGeomDirty();
+}
+function imgpCenter(c) { return [(c[0][0] + c[1][0] + c[2][0] + c[3][0]) / 4, (c[0][1] + c[1][1] + c[2][1] + c[3][1]) / 4]; }
+function imgpAxes(c) {
+  var ux = ((c[1][0] - c[0][0]) + (c[2][0] - c[3][0])) / 2, uy = ((c[1][1] - c[0][1]) + (c[2][1] - c[3][1])) / 2;
+  var vx = ((c[3][0] - c[0][0]) + (c[2][0] - c[1][0])) / 2, vy = ((c[3][1] - c[0][1]) + (c[2][1] - c[1][1])) / 2;
+  var w = Math.hypot(ux, uy) || 1e-9, h = Math.hypot(vx, vy) || 1e-9;
+  return { u: [ux / w, uy / w], v: [vx / h, vy / h], w: w, h: h };
+}
+function imgpUV(c, u, v) {      /* bilinear point inside the quad: (0,0)=A (1,0)=B (1,1)=C (0,1)=D */
+  var a = (1 - u) * (1 - v), b = u * (1 - v), d = u * v, e = (1 - u) * v;
+  return [a * c[0][0] + b * c[1][0] + d * c[2][0] + e * c[3][0], a * c[0][1] + b * c[1][1] + d * c[2][1] + e * c[3][1]];
+}
+var IMGP_EDGES = { eS: { i: [0, 1], dir: 'v', s: -1, opp: 'eN' }, eE: { i: [1, 2], dir: 'u', s: 1, opp: 'eW' },
+                   eN: { i: [2, 3], dir: 'v', s: 1, opp: 'eS' }, eW: { i: [3, 0], dir: 'u', s: -1, opp: 'eE' } };
+/* base: snapshot corners; hit0/hit: UTM terrain points at drag start / now; returns new corners or null (rejected). */
+function imgpApply(base, kind, hit0, hit, mods, keep) {
+  mods = mods || {};
+  var dx = hit[0] - hit0[0], dy = hit[1] - hit0[1];
+  var c = base.map(function (p) { return [p[0], p[1]]; });
+  if (kind === 'center') return c.map(function (p) { return [p[0] + dx, p[1] + dy]; });
+  if (kind === 'rot') {
+    var cen = imgpCenter(base);
+    var da = Math.atan2(hit[1] - cen[1], hit[0] - cen[0]) - Math.atan2(hit0[1] - cen[1], hit0[0] - cen[0]);
+    if (mods.shift) { var step = 5 * Math.PI / 180; da = Math.round(da / step) * step; }
+    var cs = Math.cos(da), sn = Math.sin(da);
+    return c.map(function (p) { var rx = p[0] - cen[0], ry = p[1] - cen[1]; return [cen[0] + rx * cs - ry * sn, cen[1] + rx * sn + ry * cs]; });
+  }
+  var ax = imgpAxes(base);
+  var det = ax.u[0] * ax.v[1] - ax.u[1] * ax.v[0];
+  if (Math.abs(det) < 1e-6) return null;
+  var a = (dx * ax.v[1] - dy * ax.v[0]) / det;     /* displacement along image-u (m) */
+  var b = (ax.u[0] * dy - ax.u[1] * dx) / det;     /* displacement along image-v (m) */
+  function grow(edge, amt) {
+    var vec = edge.dir === 'u' ? ax.u : ax.v;
+    edge.i.forEach(function (k) { c[k][0] += vec[0] * edge.s * amt; c[k][1] += vec[1] * edge.s * amt; });
+  }
+  if (IMGP_EDGES[kind]) {
+    var E = IMGP_EDGES[kind], amt = (E.dir === 'u' ? a : b) * E.s;
+    grow(E, amt);
+    if (mods.shift) grow(IMGP_EDGES[E.opp], amt);
+  } else if (/^c[0-3]$/.test(kind)) {
+    var k = +kind.charAt(1), sx = (k === 1 || k === 2) ? 1 : -1, sy = (k === 2 || k === 3) ? 1 : -1;
+    if (mods.ctrl) { c[k][0] += dx; c[k][1] += dy; return c; }          /* skew: move this corner only */
+    var gu = a * sx, gv = b * sy;
+    if (keep) { var g = (gu * ax.w + gv * ax.h) / (ax.w * ax.w + ax.h * ax.h); gu = g * ax.w; gv = g * ax.h; }
+    var eu = IMGP_EDGES[sx > 0 ? 'eE' : 'eW'], ev = IMGP_EDGES[sy > 0 ? 'eN' : 'eS'];
+    grow(eu, gu); grow(ev, gv);
+    if (mods.shift) { grow(IMGP_EDGES[eu.opp], gu); grow(IMGP_EDGES[ev.opp], gv); }
+  } else return null;
+  var nx = imgpAxes(c);
+  if (!(nx.w >= 5 && nx.h >= 5)) return null;                           /* never collapse or flip the image */
+  if (nx.u[0] * ax.u[0] + nx.u[1] * ax.u[1] <= 0 || nx.v[0] * ax.v[0] + nx.v[1] * ax.v[1] <= 0) return null;
+  return c;
+}
+/* lat/lon box + rotation (KML LatLonBox semantics, as this viewer's importer interprets them) <-> corners */
+function imgpBox(c) {
+  var cen = imgpCenter(c), ax = imgpAxes(c), ll = UTM.toLatLon(cen[0], cen[1]), dd = 0.001;
+  var p0 = UTM.toUTM(ll[0], ll[1]), pE = UTM.toUTM(ll[0] + dd, ll[1]), pN = UTM.toUTM(ll[0], ll[1] + dd);
+  var mLon = Math.hypot(pE[0] - p0[0], pE[1] - p0[1]) / dd, mLat = Math.hypot(pN[0] - p0[0], pN[1] - p0[1]) / dd;
+  var skew = Math.atan2(pE[1] - p0[1], pE[0] - p0[0]);
+  var rot = (Math.atan2(ax.u[1], ax.u[0]) - skew) * 180 / Math.PI;
+  while (rot > 180) rot -= 360; while (rot <= -180) rot += 360;
+  return { north: ll[1] + ax.h / 2 / mLat, south: ll[1] - ax.h / 2 / mLat, east: ll[0] + ax.w / 2 / mLon, west: ll[0] - ax.w / 2 / mLon, rot: rot, wM: ax.w, hM: ax.h };
+}
+function imgpCornersFromBox(n, s, e, w, rotDeg) {
+  var xy = [[w, s], [e, s], [e, n], [w, n]].map(function (ll) { var en = UTM.toUTM(ll[0], ll[1]); return [en[0], en[1]]; });
+  var cx = 0, cy = 0; xy.forEach(function (q) { cx += q[0] / 4; cy += q[1] / 4; });
+  var rr = rotDeg * Math.PI / 180, cr = Math.cos(rr), sr = Math.sin(rr);
+  return xy.map(function (q) { var dx = q[0] - cx, dy = q[1] - cy; return [cx + dx * cr - dy * sr, cy + dx * sr + dy * cr]; });
+}
+
+/* ---- screen projection (draped on the DTM like paths) ---- */
+function imgpProject(e, n) {
+  if (!store || !store.dtm) return null;
+  var mid = (store.zRange[0] + store.zRange[1]) / 2, g = store.dtmAt(e, n);
+  if (!isFinite(g)) g = mid;
+  return worldToScreen(e - store.aoiX0, mid + (g - mid) * S.exag + S.pathHeight + 0.4, -(n - store.aoiY0));
+}
+function imgpPolyline(c, uv, closed) {
+  var d = '', pen = false, n = uv.length, segs = closed ? n : n - 1;
+  for (var i = 0; i < segs; i++) {
+    var a = uv[i], b = uv[(i + 1) % n], pa = imgpUV(c, a[0], a[1]), pb = imgpUV(c, b[0], b[1]);
+    var steps = Math.max(1, Math.min(48, Math.ceil(Math.hypot(pb[0] - pa[0], pb[1] - pa[1]) / 25)));
+    for (var k = (i === 0 ? 0 : 1); k <= steps; k++) {
+      var t = k / steps, q = imgpUV(c, a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t), sp = imgpProject(q[0], q[1]);
+      if (!sp) { pen = false; continue; }
+      d += (pen ? 'L' : 'M') + sp[0].toFixed(1) + ',' + sp[1].toFixed(1);
+      pen = true;
+    }
+  }
+  return d;
+}
+var IMGP_HANDLE_UV = { center: [0.5, 0.5], c0: [0, 0], c1: [1, 0], c2: [1, 1], c3: [0, 1], eS: [0.5, 0], eE: [1, 0.5], eN: [0.5, 1], eW: [0, 0.5], rot: [0.12, 0.5] };
+var IMGP_HANDLE_TIP = {
+  center: 'Drag to move the image', rot: 'Drag to rotate (Shift = 5° steps)',
+  c0: 'Drag to stretch · Shift = scale from centre · Ctrl/⌘ = move only this corner (skew)', c1: 'Drag to stretch · Shift = scale from centre · Ctrl/⌘ = move only this corner (skew)',
+  c2: 'Drag to stretch · Shift = scale from centre · Ctrl/⌘ = move only this corner (skew)', c3: 'Drag to stretch · Shift = scale from centre · Ctrl/⌘ = move only this corner (skew)',
+  eS: 'Drag to stretch this side · Shift = scale from centre', eE: 'Drag to stretch this side · Shift = scale from centre',
+  eN: 'Drag to stretch this side · Shift = scale from centre', eW: 'Drag to stretch this side · Shift = scale from centre'
+};
+function imgpUpdate() {
+  var f = IMGP.feat;
+  if (!f || !IMGP.svg || !renderer) return;
+  if (FEATS.indexOf(f) < 0 || EDIT.mode) { imgpClose(true); return; }      /* feature deleted, or another editor took over */
+  try {
+    var c = imgpCorners(f), t = 0.1, tk = 0.05, arm = 0.07, marks = '';
+    [[0, 0], [1, 0], [1, 1], [0, 1]].forEach(function (q) {
+      var su = q[0] ? -1 : 1, sv = q[1] ? -1 : 1;
+      marks += imgpPolyline(c, [[q[0], q[1] + sv * t], [q[0], q[1]], [q[0] + su * t, q[1]]], false);
+    });
+    marks += imgpPolyline(c, [[0.5 - arm, 0], [0.5 + arm, 0]], false) + imgpPolyline(c, [[0.5, 0], [0.5, tk]], false);
+    marks += imgpPolyline(c, [[0.5 - arm, 1], [0.5 + arm, 1]], false) + imgpPolyline(c, [[0.5, 1], [0.5, 1 - tk]], false);
+    marks += imgpPolyline(c, [[0, 0.5 - arm], [0, 0.5 + arm]], false) + imgpPolyline(c, [[0, 0.5], [tk, 0.5]], false);
+    marks += imgpPolyline(c, [[1, 0.5 - arm], [1, 0.5 + arm]], false) + imgpPolyline(c, [[1, 0.5], [1 - tk, 0.5]], false);
+    marks += imgpPolyline(c, [[0.5 - 0.09, 0.5], [0.5 + 0.09, 0.5]], false) + imgpPolyline(c, [[0.5, 0.5 - 0.09], [0.5, 0.5 + 0.09]], false);
+    marks += imgpPolyline(c, [[0, 0.5], [0.1, 0.5]], false);                                   /* stem to the rotate diamond */
+    var P = IMGP.paths;
+    P.outline.setAttribute('d', imgpPolyline(c, [[0, 0], [1, 0], [1, 1], [0, 1]], true));
+    P.marks.setAttribute('d', marks); P.marksHalo.setAttribute('d', marks);
+    var cw = renderer.cv.clientWidth, ch = renderer.cv.clientHeight;
+    Object.keys(IMGP_HANDLE_UV).forEach(function (k) {
+      var uv = IMGP_HANDLE_UV[k], q = imgpUV(c, uv[0], uv[1]), sp = imgpProject(q[0], q[1]), h = IMGP.handles[k];
+      if (!sp || sp[0] < -30 || sp[0] > cw + 30 || sp[1] < -30 || sp[1] > ch + 30) { h.style.display = 'none'; if (k === 'rot') P.diamond.setAttribute('d', ''); return; }
+      h.style.display = 'block';
+      h.style.transform = 'translate(' + Math.round(sp[0]) + 'px,' + Math.round(sp[1]) + 'px)';
+      if (k === 'rot') { var x = sp[0], y = sp[1], r = 9; P.diamond.setAttribute('d', 'M' + x.toFixed(1) + ',' + (y - r).toFixed(1) + 'L' + (x + r).toFixed(1) + ',' + y.toFixed(1) + 'L' + x.toFixed(1) + ',' + (y + r).toFixed(1) + 'L' + (x - r).toFixed(1) + ',' + y.toFixed(1) + 'Z'); }
+    });
+  } catch (e) { /* never let an overlay glitch stop the render loop */ }
+}
+function imgpSyncPanel(force) {
+  var f = IMGP.feat; if (!f) return;
+  var b = imgpBox(imgpCorners(f));
+  var vals = { 'imgp-n': b.north.toFixed(7), 'imgp-s': b.south.toFixed(7), 'imgp-e': b.east.toFixed(7), 'imgp-w': b.west.toFixed(7), 'imgp-rot': b.rot.toFixed(3) };
+  Object.keys(vals).forEach(function (id) { var el = $(id); if (el && (force || document.activeElement !== el)) el.value = vals[id]; });
+  $('imgp-info').textContent = b.wM.toFixed(0) + ' m × ' + b.hM.toFixed(0) + ' m' + (f.photos && f.photos[0] && f.photos[0].fullW ? ' · image ' + f.photos[0].fullW + ' × ' + f.photos[0].fullH + ' px' : '');
+}
+function imgpApplyFields() {
+  var f = IMGP.feat; if (!f) return;
+  var n = parseFloat($('imgp-n').value), s2 = parseFloat($('imgp-s').value), e = parseFloat($('imgp-e').value), w = parseFloat($('imgp-w').value), r = parseFloat($('imgp-rot').value);
+  if (![n, s2, e, w, r].every(isFinite) || n <= s2 || e <= w || Math.abs(n) > 90 || Math.abs(s2) > 90 || Math.abs(e) > 180 || Math.abs(w) > 180) {
+    toast('Enter valid values: North > South, East > West (decimal degrees)'); imgpSyncPanel(true); return;
+  }
+  imgpSetCorners(f, imgpCornersFromBox(n, s2, e, w, r));
+  markGeomDirty(); imgpSyncPanel(true);
+}
+function imgpOpen(f) {
+  if (!f || !f.groundImageOverlay || !f.xy || f.xy.length < 4) return;
+  if (!store || !store.dtm) { toast('Load LiDAR terrain first — the image is positioned on the terrain surface'); return; }
+  if (IMGP.feat) imgpClose(true);
+  if (EDIT.mode === 'draw') cancelDraw(); else if (EDIT.mode === 'edit') exitEdit();
+  IMGP.feat = f; IMGP.orig = imgpCorners(f); IMGP.origOpacity = f.imageOpacity; IMGP.origVis = f.vis; IMGP.drag = null;
+  f.vis = true;
+  $('imgp-name').textContent = f.name;
+  var op = Math.round((f.imageOpacity != null && isFinite(f.imageOpacity) ? f.imageOpacity : 1) * 100);
+  $('imgp-opacity').value = op; $('imgp-opacity-val').textContent = op + '%';
+  $('imgp-keep').checked = IMGP.keep;
+  $('imgp-panel').classList.add('open');
+  IMGP.svg.style.display = ''; IMGP.layer.style.display = '';
+  imgpSyncPanel(true);
+  var cen = imgpCenter(IMGP.orig), sp = imgpProject(cen[0], cen[1]);
+  if (cam && !cam.fpMode && (!sp || sp[0] < 0 || sp[1] < 0 || sp[0] > renderer.cv.clientWidth || sp[1] > renderer.cv.clientHeight)) {
+    cam.tTargetX = clampF(cen[0] - store.aoiX0, 0, store.aoiX1 - store.aoiX0);
+    cam.tTargetZ = clampF(-(cen[1] - store.aoiY0), -(store.aoiY1 - store.aoiY0), 0);
+    cam.clampTarget();
+  }
+  updateFeatureGeometry();
+  toast('Adjusting “' + f.name + '” — drag the green handles; the slider changes transparency');
+}
+function imgpClose(ok) {
+  var f = IMGP.feat; if (!f) return;
+  IMGP.feat = null; IMGP.drag = null;
+  if (!ok) { imgpSetCorners(f, IMGP.orig); f.imageOpacity = IMGP.origOpacity; f.vis = IMGP.origVis; }
+  $('imgp-panel').classList.remove('open');
+  if (IMGP.svg) IMGP.svg.style.display = 'none';
+  if (IMGP.layer) IMGP.layer.style.display = 'none';
+  _geomDirty = false; _lastGeomT = performance.now();
+  updateFeatureGeometry();
+  if (ok) { saveFeats(); toast('Image placement saved for “' + f.name + '”'); }
+  buildFeaturePanel();
+}
+function imgpInit() {
+  var NS = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(NS, 'svg'); svg.id = 'imgp-svg'; svg.style.display = 'none';
+  function mk(cls) { var pth = document.createElementNS(NS, 'path'); pth.setAttribute('class', cls); svg.appendChild(pth); return pth; }
+  IMGP.paths = { outline: mk('imgp-outline'), marksHalo: mk('imgp-halo'), marks: mk('imgp-line'), diamond: null };
+  var dia = mk('imgp-line imgp-diamond'); IMGP.paths.diamond = dia;
+  document.body.appendChild(svg); IMGP.svg = svg;
+  var layer = document.createElement('div'); layer.id = 'imgp-layer'; layer.style.display = 'none';
+  Object.keys(IMGP_HANDLE_UV).forEach(function (k) {
+    var h = document.createElement('div'); h.className = 'imgp-h'; h.setAttribute('data-k', k); h.title = IMGP_HANDLE_TIP[k];
+    layer.appendChild(h); IMGP.handles[k] = h;
+  });
+  document.body.appendChild(layer); IMGP.layer = layer;
+
+  layer.addEventListener('wheel', function (e) { var cv = $('gl'); if (cv) cv.dispatchEvent(new WheelEvent('wheel', e)); }, { passive: true });
+  layer.addEventListener('mousedown', function (e) { if (e.target.closest && e.target.closest('.imgp-h')) { e.preventDefault(); e.stopPropagation(); } });
+  layer.addEventListener('pointerdown', function (e) {
+    var h = e.target.closest ? e.target.closest('.imgp-h') : null;
+    if (!h || !IMGP.feat || (e.button !== undefined && e.button > 0)) return;
+    e.preventDefault(); e.stopPropagation();
+    var hit0 = pickTerrain(e.clientX, e.clientY);
+    if (!hit0) { toast('Grab the handle on a visible part of the terrain'); return; }
+    IMGP.drag = { kind: h.getAttribute('data-k'), base: imgpCorners(IMGP.feat), hit0: hit0, pid: e.pointerId, el: h };
+    h.classList.add('drag');
+  });
+  window.addEventListener('pointermove', function (e) {
+    var d = IMGP.drag; if (!d || e.pointerId !== d.pid || !IMGP.feat) return;
+    var hit = pickTerrain(e.clientX, e.clientY); if (!hit) return;
+    var c = imgpApply(d.base, d.kind, d.hit0, hit, { shift: e.shiftKey, ctrl: e.ctrlKey || e.metaKey }, IMGP.keep);
+    if (!c) return;
+    imgpSetCorners(IMGP.feat, c);
+    imgpSyncPanel(false);
+  });
+  function endDrag(e) {
+    var d = IMGP.drag; if (!d || (e && e.pointerId !== d.pid)) return;
+    d.el.classList.remove('drag'); IMGP.drag = null;
+    _geomDirty = false; _lastGeomT = performance.now(); updateFeatureGeometry();
+    imgpSyncPanel(true);
+  }
+  window.addEventListener('pointerup', endDrag);
+  window.addEventListener('pointercancel', endDrag);
+
+  $('imgp-opacity').addEventListener('input', function () {
+    if (!IMGP.feat) return;
+    var v = +this.value; IMGP.feat.imageOpacity = v / 100; $('imgp-opacity-val').textContent = v + '%';
+  });
+  $('imgp-keep').addEventListener('change', function () { IMGP.keep = this.checked; });
+  ['imgp-n', 'imgp-s', 'imgp-e', 'imgp-w', 'imgp-rot'].forEach(function (id) {
+    $(id).addEventListener('change', imgpApplyFields);
+    $(id).addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); imgpApplyFields(); this.blur(); } else if (e.key === 'Escape') { e.stopPropagation(); } });
+  });
+  $('imgp-reset').addEventListener('click', function () {
+    var f = IMGP.feat; if (!f) return;
+    imgpSetCorners(f, IMGP.orig); f.imageOpacity = IMGP.origOpacity;
+    var op = Math.round((f.imageOpacity != null && isFinite(f.imageOpacity) ? f.imageOpacity : 1) * 100);
+    $('imgp-opacity').value = op; $('imgp-opacity-val').textContent = op + '%'; imgpSyncPanel(true);
+  });
+  $('imgp-ok').addEventListener('click', function () { imgpClose(true); });
+  $('imgp-cancel').addEventListener('click', function () { imgpClose(false); });
+  $('imgp-x').addEventListener('click', function () { imgpClose(false); });
+  window.addEventListener('keydown', function (e) {
+    if (!IMGP.feat) return;
+    var t = e.target; if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return;
+    if (e.code === 'Escape') { e.preventDefault(); imgpClose(false); }
+    else if (e.code === 'Enter') { e.preventDefault(); imgpClose(true); }
+  });
+  /* draggable panel */
+  var head = $('imgp-head'), pan = $('imgp-panel'), off = null;
+  head.addEventListener('pointerdown', function (e) {
+    if (e.target.closest && e.target.closest('button')) return;
+    var r = pan.getBoundingClientRect(); off = { dx: e.clientX - r.left, dy: e.clientY - r.top, pid: e.pointerId };
+    pan.style.left = r.left + 'px'; pan.style.top = r.top + 'px'; pan.style.right = 'auto';
+    try { head.setPointerCapture(e.pointerId); } catch (err) {}
+  });
+  head.addEventListener('pointermove', function (e) {
+    if (!off || e.pointerId !== off.pid) return;
+    pan.style.left = Math.max(0, Math.min(window.innerWidth - 80, e.clientX - off.dx)) + 'px';
+    pan.style.top = Math.max(0, Math.min(window.innerHeight - 40, e.clientY - off.dy)) + 'px';
+  });
+  head.addEventListener('pointerup', function () { off = null; });
+}
+
 /* ================= Elevation Profile ================= */
 var ELEV_PROFILE = { active: false, start: null, end: null, samples: [], hoverIndex: -1, drag: null, lineVersion: 0 };
 function epFmtElevation(z) { return isFinite(z) ? z.toFixed(2) + ' m' : 'No elevation'; }
@@ -7483,7 +7901,7 @@ function importFeatureBackupFile(file) {
       var need = raw.kind === 'point' ? 1 : 2;
       if (xy.length < need) { skipped++; return; }
       var nf = Object.assign({ name: raw.name.trim(), kind: raw.kind, xy: xy, vis: raw.vis !== false }, defaultFeatureAppearance(raw.kind));
-      ['lineColor','lineOpacity','lineWidth','fillColor','fillOpacity','markerColor','markerSymbol','markerScale','showLabel','groundImageOverlay'].forEach(function (k) {
+      ['lineColor','lineOpacity','lineWidth','fillColor','fillOpacity','markerColor','markerSymbol','markerScale','showLabel','groundImageOverlay','imageOpacity'].forEach(function (k) {
         if (raw[k] !== undefined) nf[k] = raw[k];
       });
       if (Array.isArray(raw.photos)) nf.photos = raw.photos.slice(0, 30).filter(function (ph) { return ph && (safePhotoHref(ph.src || '') || safePhotoHref(ph.href || '')); }).map(function (ph) { return { name: String(ph.name || 'Photo').slice(0, 200), caption: String(ph.caption || '').slice(0, 500), type: String(ph.type || '').slice(0, 80), src: safePhotoHref(ph.src || ''), href: safePhotoHref(ph.href || ''), xy: Array.isArray(ph.xy) ? [+ph.xy[0], +ph.xy[1]] : undefined }; });
@@ -7518,13 +7936,21 @@ function dlBlob(blob, name) {
   setTimeout(function () { a.remove(); URL.revokeObjectURL(a.href); }, 1500);
   toast('Saved ' + name);
 }
-function buildKmlText(photoPathMap) {
+function buildKmlText(photoPathMap, groundPathMap) {
   photoPathMap = photoPathMap || Object.create(null);
   var out = [];
   out.push('<?xml version="1.0" encoding="UTF-8"?>');
-  out.push('<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>NS LiDAR Features</name>');
+  out.push('<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2"><Document><name>NS LiDAR Features</name>');
   for (var i = 0; i < FEATS.length; i++) {
     var f = FEATS[i]; if (!f.xy.length) continue;
+    if (groundPathMap && groundPathMap[i] && f.xy.length >= 4) {   // v2.38: image overlays round-trip as real GroundOverlays (gx:LatLonQuad keeps rotation/skew)
+      var quad = f.xy.slice(0, 4).map(function (q) { var v = llAlt(q); return v[0] + ',' + v[1]; }).join(' ');
+      var alpha = Math.round(((f.imageOpacity != null && isFinite(f.imageOpacity)) ? f.imageOpacity : 1) * 255).toString(16);
+      if (alpha.length < 2) alpha = '0' + alpha;
+      out.push('  <GroundOverlay><name>' + xmlEsc(f.name) + '</name><visibility>' + (f.vis ? '1' : '0') + '</visibility><color>' + alpha + 'ffffff</color>' +
+        '<Icon><href>' + xmlEsc(groundPathMap[i]) + '</href></Icon><gx:LatLonQuad><coordinates>' + quad + '</coordinates></gx:LatLonQuad></GroundOverlay>');
+      continue;
+    }
     var st = featureStyle(f), pts = [];
     for (var j = 0; j < f.xy.length; j++) { var v = llAlt(f.xy[j]); pts.push(v[0] + ',' + v[1] + ',' + v[2]); }
     if (f.kind === 'polygon') {
@@ -7564,12 +7990,14 @@ function exportKml() {
   if (!FEATS.length) { toast('No features to export yet'); return; }
   dlBlob(new Blob([buildKmlText()], { type: 'application/vnd.google-earth.kml+xml' }), 'ns-lidar-features.kml');
 }
+var CRC32_TABLE = null;
 function crc32(bytes) {
-  var crc = 0xffffffff;
-  for (var i = 0; i < bytes.length; i++) {
-    crc ^= bytes[i];
-    for (var j = 0; j < 8; j++) crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+  if (!CRC32_TABLE) {   // v2.38: table-driven (large overlay images are tens of MB)
+    CRC32_TABLE = new Uint32Array(256);
+    for (var n = 0; n < 256; n++) { var cc = n; for (var k = 0; k < 8; k++) cc = (cc & 1) ? (0xedb88320 ^ (cc >>> 1)) : (cc >>> 1); CRC32_TABLE[n] = cc >>> 0; }
   }
+  var crc = 0xffffffff;
+  for (var i = 0; i < bytes.length; i++) crc = CRC32_TABLE[(crc ^ bytes[i]) & 0xff] ^ (crc >>> 8);
   return (crc ^ 0xffffffff) >>> 0;
 }
 function zipSingleStoredFile(filename, contents) {
@@ -7627,8 +8055,25 @@ function zipStoredFiles(files) {
 }
 function exportKmz() {
   if (!FEATS.length) { toast('No features to export yet'); return; }
-  var photoFiles = [], photoPathMap = Object.create(null), pending = [];
+  var photoFiles = [], photoPathMap = Object.create(null), groundPathMap = Object.create(null), groundJobs = [];
   FEATS.forEach(function (feature, fi) {
+    var gp = feature.groundImageOverlay && feature.photos && feature.photos[0];
+    if (gp) {   // v2.38: overlay images go in at original resolution (the 1280 px preview is only a fallback)
+      var gname = 'files/overlay_' + String(fi + 1).padStart(3, '0');
+      if (gp.fullBlob && gp.fullBlob.arrayBuffer) {
+        var gext = /png/i.test(gp.fullBlob.type) ? 'png' : /webp/i.test(gp.fullBlob.type) ? 'webp' : /gif/i.test(gp.fullBlob.type) ? 'gif' : 'jpg';
+        groundPathMap[fi] = gname + '.' + gext;
+        groundJobs.push(gp.fullBlob.arrayBuffer().then(function (buf) { return { name: gname + '.' + gext, data: new Uint8Array(buf) }; }));
+        return;
+      }
+      var gparsed = /^data:image\//i.test(String(gp.src || '')) ? dataUrlToBytes(gp.src) : null;
+      if (gparsed) {
+        var gext2 = gparsed.type.indexOf('png') >= 0 ? 'png' : gparsed.type.indexOf('webp') >= 0 ? 'webp' : gparsed.type.indexOf('gif') >= 0 ? 'gif' : 'jpg';
+        groundPathMap[fi] = gname + '.' + gext2;
+        photoFiles.push({ name: gname + '.' + gext2, data: gparsed.bytes });
+        return;
+      }
+    }
     (feature.photos || []).slice(0, 30).forEach(function (photo, pi) {
       var src = photo && photo.src;
       if (!/^data:image\/(?:png|jpe?g|webp|gif);base64,/i.test(String(src || ''))) return;
@@ -7639,9 +8084,11 @@ function exportKmz() {
       photoFiles.push({ name: path, data: parsed.bytes });
     });
   });
-  var kml = buildKmlText(photoPathMap);
-  var zip = zipStoredFiles([{ name: 'doc.kml', data: kml }].concat(photoFiles));
-  dlBlob(new Blob([zip], { type: 'application/vnd.google-earth.kmz' }), 'ns-lidar-features.kmz');
+  Promise.all(groundJobs).then(function (groundFiles) {
+    var kml = buildKmlText(photoPathMap, groundPathMap);
+    var zip = zipStoredFiles([{ name: 'doc.kml', data: kml }].concat(photoFiles, groundFiles));
+    dlBlob(new Blob([zip], { type: 'application/vnd.google-earth.kmz' }), 'ns-lidar-features.kmz');
+  }).catch(function (e) { toast('KMZ export failed: ' + (e && e.message ? e.message : e)); });
 }
 function gpxStyleExtension(f) {
   var st = featureStyle(f);
@@ -10074,6 +10521,7 @@ function frame() {
     epUpdateMapMarkers();
     updateFeatureLabels();
     updateEditHandles();
+    imgpUpdate();
     consumeGeomDirty();
     var now = performance.now();
     if (now - hudT > 120) {
@@ -10123,6 +10571,7 @@ function boot() {
   try { initUI(); } catch (e) { console.error('initUI failed:', e); }
   try { initInput(); } catch (e) { console.error('initInput failed:', e); }
   try { initEditing(); } catch (e) { console.error('initEditing failed:', e); }  // v1.6
+  try { imgpInit(); } catch (e) { console.error('imgpInit failed:', e); }     // v2.38
   try { initAutoDetect(); } catch (e) { console.error('initAutoDetect failed:', e); }  // v2.7
   try { initElevationProfile(); } catch (e) { console.error('initElevationProfile failed:', e); }  // v2.15
   /* v1.2: surface otherwise-silent errors as a visible toast so problems
