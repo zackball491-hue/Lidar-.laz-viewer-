@@ -1,5 +1,6 @@
 <!DOCTYPE html>
-<!-- v2.38: Google Earth Pro-style image-overlay placement editor (move / stretch / skew / rotate handles, transparency slider, N/S/E/W/rotation fields), KMZ export of adjusted GroundOverlays at original resolution. -->
+<!-- v2.39: new default look (relief 15 m / amp 2.05 m, tone 1.5 / -0.32 / 1.9 / 1.6 / 0.85, sun 0° / 55° / 1.15x, shadow 2.5, hillshade 1, ambient 0, multi-light 40%, eye-dome 4). Shading reset now restores sun intensity, shadow contrast, sun colour and multi-light blend too. -->
+<!-- v2.38: (exports rectangles as standard LatLonBox+rotation; skewed images as gx:LatLonQuad) Google Earth Pro-style image-overlay placement editor (move / stretch / skew / rotate handles, transparency slider, N/S/E/W/rotation fields), KMZ export of adjusted GroundOverlays at original resolution. -->
 <!-- v2.37: Large KMZ/KML images (tested with a 29.7 MB, 6157x7822 PNG GroundOverlay) now load at full resolution onto the mesh. Old 20 MB per-image / 100 MB total import caps raised; ground overlays keep the original image (blob URL, alpha preserved) instead of the 1280 px JPEG gallery preview; texture upload is clamped to the GPU MAX_TEXTURE_SIZE and reports errors. -->
 <!-- v2.29: Load embedded KMZ images, resolve internal archive paths, support KML GroundOverlay/PhotoOverlay and archive gallery. -->
 <!-- Auto-Detect: the Point Compare detector was replaced by the oriented-line / closed-depression detector -->
@@ -8,7 +9,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>NS LiDAR Micro-Topography Viewer v2.38 — Expanded Sun & Hillshade Controls</title>
+<title>NS LiDAR Micro-Topography Viewer v2.39 — Expanded Sun & Hillshade Controls</title>
 <style>
 
 :root {
@@ -661,7 +662,7 @@ body.editing #gl { cursor: crosshair; }
 
 <!-- ============ loading ============ -->
 <div id="loading">
-  <div class="title">NS LiDAR <b>Micro-Topography</b> Viewer <span class="ed">v2.36</span></div>
+  <div class="title">NS LiDAR <b>Micro-Topography</b> Viewer <span class="ed">v2.39</span></div>
   <div class="sub">Load your own <b>.laz / .las</b> files — ground points are extracted automatically,
   tiles are placed at their true UTM coordinates and merged across acquisition years.</div>
   <div id="lbar"><div id="lbarfill" style="width:8%"></div></div>
@@ -680,7 +681,7 @@ body.editing #gl { cursor: crosshair; }
 <!-- ============ top bar ============ -->
 <div id="topbar">
   <div id="brand">
-    <div class="t1">NS LiDAR <span>Micro-Topography</span> Viewer <span class="ed">v2.36</span></div>
+    <div class="t1">NS LiDAR <span>Micro-Topography</span> Viewer <span class="ed">v2.39</span></div>
     <div class="t2">load-your-own .laz edition · TerraScan terrain analysis · exact raster/point colour matching · GPS photos · GPX/KML/KMZ</div>
     <div id="coords">No point data loaded</div>
   </div>
@@ -821,9 +822,9 @@ body.editing #gl { cursor: crosshair; }
       <div class="shead"><span>Local Relief (micro-topo)</span><span class="arrow">▶</span></div>
       <div class="sbody">
         <div class="ctl"><label>Smoothing window <span class="val" id="reliefWindowVal"></span></label>
-          <input type="range" id="reliefWindow" min="3" max="60" step="1" value="10"></div>
+          <input type="range" id="reliefWindow" min="3" max="60" step="1" value="15"></div>
         <div class="ctl"><label>Amplitude (± full scale) <span class="val" id="reliefAmpVal"></span></label>
-          <input type="range" id="reliefAmp" min="0.05" max="3" step="0.01" value="1.6"></div>
+          <input type="range" id="reliefAmp" min="0.05" max="3" step="0.01" value="2.05"></div>
         <div class="note">Smaller window emphasizes small terrain variations; larger window
         brings out broad undulations. Smaller amplitude = more contrast.</div>
       </div>
@@ -833,15 +834,15 @@ body.editing #gl { cursor: crosshair; }
       <div class="shead"><span>Tone</span><span class="arrow">▶</span></div>
       <div class="sbody">
         <div class="ctl"><label>Contrast <span class="val" id="contrastVal"></span></label>
-          <input type="range" id="contrast" min="0.2" max="3" step="0.05" value="1.55"></div>
+          <input type="range" id="contrast" min="0.2" max="3" step="0.05" value="1.5"></div>
         <div class="ctl"><label>Brightness <span class="val" id="brightnessVal"></span></label>
-          <input type="range" id="brightness" min="-0.5" max="0.5" step="0.01" value="-0.05"></div>
+          <input type="range" id="brightness" min="-0.5" max="0.5" step="0.01" value="-0.32"></div>
         <div class="ctl"><label>Gamma <span class="val" id="gammaVal"></span></label>
-          <input type="range" id="gamma" min="0.3" max="3" step="0.05" value="1.65"></div>
+          <input type="range" id="gamma" min="0.3" max="3" step="0.05" value="1.9"></div>
         <div class="ctl"><label>Intensity (gain) <span class="val" id="intensityVal"></span></label>
-          <input type="range" id="intensity" min="0.2" max="3" step="0.05" value="1.15"></div>
+          <input type="range" id="intensity" min="0.2" max="3" step="0.05" value="1.6"></div>
         <div class="ctl"><label>Saturation <span class="val" id="saturationVal"></span></label>
-          <input type="range" id="saturation" min="0" max="2" step="0.05" value="1.2"></div>
+          <input type="range" id="saturation" min="0" max="2" step="0.05" value="0.85"></div>
       </div>
     </div>
 
@@ -849,25 +850,25 @@ body.editing #gl { cursor: crosshair; }
       <div class="shead"><span>Shading &amp; Eye-Dome</span><span class="arrow">▶</span></div>
       <div class="sbody">
         <div class="ctl"><label>Sun azimuth <span class="val" id="sunAzVal"></span></label>
-          <input type="range" id="sunAz" min="0" max="360" step="1" value="315"></div>
+          <input type="range" id="sunAz" min="0" max="360" step="1" value="0"></div>
         <div class="ctl"><label>Sun elevation <span class="val" id="sunElVal"></span></label>
-          <input type="range" id="sunEl" min="5" max="90" step="1" value="35"></div>
+          <input type="range" id="sunEl" min="5" max="90" step="1" value="55"></div>
         <div class="ctl"><label>Sun intensity <span class="val" id="sunIntensityVal"></span></label>
-          <input type="range" id="sunIntensity" min="0" max="2" step="0.05" value="1"></div>
+          <input type="range" id="sunIntensity" min="0" max="2" step="0.05" value="1.15"></div>
         <div class="ctl"><label>Shadow contrast <span class="val" id="shadowContrastVal"></span></label>
-          <input type="range" id="shadowContrast" min="0.35" max="2.5" step="0.05" value="1"></div>
+          <input type="range" id="shadowContrast" min="0.35" max="2.5" step="0.05" value="2.5"></div>
         <div class="ctl"><label>Sun colour <span class="val">Direct light tint</span></label>
           <input type="color" id="sunColor" value="#ffffff" style="width:100%;height:32px;padding:2px;border:1px solid var(--border);border-radius:6px;background:#1a2433;cursor:pointer"></div>
         <div class="ctl"><label>Hillshade strength <span class="val" id="hillshadeVal"></span></label>
-          <input type="range" id="hillshade" min="0" max="1" step="0.05" value="0.75"></div>
+          <input type="range" id="hillshade" min="0" max="1" step="0.05" value="1"></div>
         <div class="ctl"><label>Ambient light <span class="val" id="ambientVal"></span></label>
-          <input type="range" id="ambient" min="0" max="1" step="0.05" value="0.3"></div>
+          <input type="range" id="ambient" min="0" max="1" step="0.05" value="0"></div>
         <label class="chk"><input type="checkbox" id="chk-multi" checked> Enable multi-directional lighting</label>
         <div class="ctl"><label>Multi-light blend <span class="val" id="multiBlendVal"></span></label>
-          <input type="range" id="multiBlend" min="0" max="1" step="0.05" value="1"></div>
+          <input type="range" id="multiBlend" min="0" max="1" step="0.05" value="0.4"></div>
         <div class="note">Sun intensity brightens or reduces direct illumination. Shadow contrast controls how strongly slopes turn from lit to shaded. Sun colour tints the direct light; ambient light stays neutral and fills shadows. Multi-light blend moves between the chosen sun direction and a softer four-directional hillshade. The checkbox disables the four-light blend entirely.</div>
         <div class="ctl" style="margin-top:10px"><label>Eye-dome strength <span class="val" id="edlStrengthVal"></span></label>
-          <input type="range" id="edlStrength" min="0" max="4" step="0.05" value="1"></div>
+          <input type="range" id="edlStrength" min="0" max="4" step="0.05" value="4"></div>
         <div class="ctl"><label>Eye-dome radius <span class="val" id="edlRadiusVal"></span></label>
           <input type="range" id="edlRadius" min="0.5" max="4" step="0.1" value="1.5"></div>
         <label class="chk"><input type="checkbox" id="chk-edl" checked> Eye-Dome Lighting (crease shading)</label>
@@ -3033,11 +3034,11 @@ function defaultState() {
   return {
     mode: 1, ramp: 4,
     zMin: 0, zMax: 50,
-    contrast: 1.35, brightness: 0, gamma: 1.0, saturation: 1.1, intensity: 1.15,
-    exag: 2.5, reliefAmp: 0.3, reliefWindow: 15,
-    sunAz: 315, sunEl: 35, sunIntensity: 1.0, shadowContrast: 1.0, sunColor: '#ffffff',
-    hillshade: 0.75, ambient: 0.3, multi: true, multiBlend: 1.0,
-    edl: true, edlStrength: 1.0, edlRadius: 1.5,
+    contrast: 1.5, brightness: -0.32, gamma: 1.9, saturation: 0.85, intensity: 1.6,
+    exag: 2.5, reliefAmp: 2.05, reliefWindow: 15,
+    sunAz: 0, sunEl: 55, sunIntensity: 1.15, shadowContrast: 2.5, sunColor: '#ffffff',
+    hillshade: 1.0, ambient: 0.0, multi: true, multiBlend: 0.4,
+    edl: true, edlStrength: 4.0, edlRadius: 1.5,
     pointWorld: true, splatM: 1.15, pointPx: 1.2, opacity: 1.0, fog: 0,
     contourInt: 0.25, contourStr: 0,
     sky: true, bgColor: '#0b0f14',
@@ -3105,12 +3106,16 @@ function applyPreset(st, i) {
   if (i === 0) {
     /* v1.5: matches the original viewer's "Micro-topography" preset
        (ramp 4, window 15, amp 0.30, contrast 1.35, gamma 1.0). */
-    st.mode = 1; st.ramp = 4; st.reliefWindow = 15; st.reliefAmp = 0.3;
-    st.contrast = 1.35; st.gamma = 1.0; st.hillshade = 0.75; st.ambient = 0.3;
-    st.multi = true; st.sunAz = 315; st.sunEl = 35; st.exag = 2.5;
+    /* v2.39: the user's preferred look (window 15 m, amp 2.05 m, contrast 1.5, brightness -0.32, gamma 1.9,
+       gain 1.6, saturation 0.85, sun 0°/55° at 1.15x, shadow contrast 2.5, hillshade 1, ambient 0,
+       multi-light 40%, eye-dome 4). */
+    st.mode = 1; st.ramp = 4; st.reliefWindow = 15; st.reliefAmp = 2.05;
+    st.contrast = 1.5; st.gamma = 1.9; st.hillshade = 1.0; st.ambient = 0.0;
+    st.multi = true; st.multiBlend = 0.4; st.sunAz = 0; st.sunEl = 55; st.exag = 2.5;
+    st.sunIntensity = 1.15; st.shadowContrast = 2.5; st.sunColor = '#ffffff';
     st.pointPx = 1.2; st.pointWorld = true; st.splatM = 1.15;
-    st.edl = true; st.edlStrength = 1.0; st.edlRadius = 1.5; st.contourStr = 0;
-    st.intensity = 1.15; st.brightness = 0; st.saturation = 1.1; st.sky = true; st.fog = 0;
+    st.edl = true; st.edlStrength = 4.0; st.edlRadius = 1.5; st.contourStr = 0;
+    st.intensity = 1.6; st.brightness = -0.32; st.saturation = 0.85; st.sky = true; st.fog = 0;
   } else if (i === 1) {
     st.mode = 3; st.ramp = 8; st.hillshade = 1.0; st.ambient = 0.42; st.multi = true;
     st.exag = 3.0; st.contrast = 1.2; st.gamma = 0.9; st.pointPx = 1.2; st.pointWorld = true;
@@ -6063,7 +6068,7 @@ function mergeImportedFeatures(got, filename, importInfo) {
   if (photoCount) msg += ' · ' + photoCount + ' photo' + (photoCount === 1 ? '' : 's') + ' attached';
   if (importInfo && importInfo.archiveImageCount) msg += ' · ' + importInfo.archiveImageCount + ' embedded KMZ image' + (importInfo.archiveImageCount === 1 ? '' : 's') + ' extracted';
   if (importInfo && importInfo.unresolved) msg += ' · ' + importInfo.unresolved + ' image reference' + (importInfo.unresolved === 1 ? '' : 's') + ' not found';
-  if (importInfo && importInfo.skipped) msg += ' · ' + importInfo.skipped + ' archive image' + (importInfo.skipped === 1 ? '' : 's') + ' skipped (size/format limit)';
+  if (importInfo && importInfo.skipped) msg += ' · ' + importInfo.skipped + ' archive image' + (importInfo.skipped === 1 ? '' : 's') + ' skipped (' + (importInfo.skipNotes && importInfo.skipNotes.length ? importInfo.skipNotes.slice(0, 2).join('; ') : 'size/format limit') + ')';
   if (got.some(function (f) { return f.groundImageOverlay; })) msg += ' · click 🖼 in the Features list to adjust the image placement';
   toast(msg);
 }
@@ -6099,7 +6104,8 @@ function importKmlFile(f, sidecarAssetsPromise) {
     mergeImportedFeatures(resolved.features, f.name, {
       archiveImageCount: archive.photos ? archive.photos.length : 0,
       unresolved: resolved.stats.missing,
-      skipped: archive.skippedImages || 0
+      skipped: archive.skippedImages || 0,
+      skipNotes: archive.skipNotes || []
     });
   }).catch(function (e) { toast(f.name + ': ' + (e.message || 'could not read KML/KMZ')); });
 }
@@ -6141,9 +6147,9 @@ function unzipKmzArchive(buf) {
   }
   var imageEntries = entries.filter(function (entry) { return isImagePath(entry.name, '') && entry.name.charAt(entry.name.length - 1) !== '/'; });
   // Keep the import bounded without silently discarding every image when a KMZ is larger than the old global limit.
-  var selectedImages = [], totalBytes = 0, skippedImages = 0;
+  var selectedImages = [], totalBytes = 0, skippedImages = 0, skipNotes = [];
   imageEntries.forEach(function (entry) {
-    if (entry.usize > PHOTO_MAX_BYTES || totalBytes + entry.usize > KMZ_MAX_TOTAL_IMAGE_BYTES || selectedImages.length >= KMZ_MAX_IMAGE_COUNT) skippedImages++;
+    if (entry.usize > PHOTO_MAX_BYTES || totalBytes + entry.usize > KMZ_MAX_TOTAL_IMAGE_BYTES || selectedImages.length >= KMZ_MAX_IMAGE_COUNT) { skippedImages++; skipNotes.push(entry.name.split('/').pop() + ' exceeds the import limits'); }
     else { selectedImages.push(entry); totalBytes += entry.usize; }
   });
   return Promise.all([extract(kmlEntry), Promise.all(selectedImages.map(function (entry) {
@@ -6151,7 +6157,7 @@ function unzipKmzArchive(buf) {
       return photoBlobToAsset(new Blob([bytes], { type: imageMimeFromName(entry.name) })).then(function (asset) {
         return { name: entry.name, src: asset.src, fullSrc: asset.fullSrc, fullW: asset.fullW, fullH: asset.fullH, fullBlob: asset.fullBlob, type: 'image/jpeg', archivePath: entry.name };
       });
-    }).catch(function (err) { skippedImages++; if (typeof toast === 'function') toast(entry.name.split('/').pop() + ': ' + (err && err.message ? err.message : 'could not load image')); return null; });
+    }).catch(function (err) { skippedImages++; skipNotes.push(entry.name.split('/').pop() + ': ' + (err && err.message ? err.message : 'could not load')); if (typeof toast === 'function') toast(entry.name.split('/').pop() + ': ' + (err && err.message ? err.message : 'could not load image')); return null; });
   }))]).then(function (parts) {
     var assets = Object.create(null), photos = [];
     parts[1].forEach(function (photo, idx) {
@@ -6159,7 +6165,7 @@ function unzipKmzArchive(buf) {
       photos.push(photo);
       photoPathKeys(selectedImages[idx].name).forEach(function (key) { if (!assets[key] || key.indexOf('/') >= 0) assets[key] = photo; });
     });
-    return { kmlBytes: parts[0], kmlPath: kmlEntry.name, assets: assets, photos: photos, skippedImages: skippedImages };
+    return { kmlBytes: parts[0], kmlPath: kmlEntry.name, assets: assets, photos: photos, skippedImages: skippedImages, skipNotes: skipNotes };
   });
 }
 function imageRefLooksValid(href, type) {
@@ -7944,11 +7950,22 @@ function buildKmlText(photoPathMap, groundPathMap) {
   for (var i = 0; i < FEATS.length; i++) {
     var f = FEATS[i]; if (!f.xy.length) continue;
     if (groundPathMap && groundPathMap[i] && f.xy.length >= 4) {   // v2.38: image overlays round-trip as real GroundOverlays (gx:LatLonQuad keeps rotation/skew)
-      var quad = f.xy.slice(0, 4).map(function (q) { var v = llAlt(q); return v[0] + ',' + v[1]; }).join(' ');
+      var c4 = f.xy.slice(0, 4).map(function (q) { return [q[0], q[1]]; });
+      var gax = imgpAxes(c4);
+      var gdx = Math.hypot(c4[1][0] - c4[0][0], c4[1][1] - c4[0][1]) - Math.hypot(c4[2][0] - c4[3][0], c4[2][1] - c4[3][1]);
+      var gdy = Math.hypot(c4[3][0] - c4[0][0], c4[3][1] - c4[0][1]) - Math.hypot(c4[2][0] - c4[1][0], c4[2][1] - c4[1][1]);
+      var isRect = Math.abs(gax.u[0] * gax.v[0] + gax.u[1] * gax.v[1]) < 0.003 && Math.abs(gdx) < 0.002 * gax.w && Math.abs(gdy) < 0.002 * gax.h;
+      var geomXml;
+      if (isRect) {   // plain rectangle (moved / stretched / rotated): standard LatLonBox + rotation, readable by Google Earth (all editions), QGIS, ArcGIS, etc.
+        var gb = imgpBox(c4);
+        geomXml = '<LatLonBox><north>' + gb.north.toFixed(9) + '</north><south>' + gb.south.toFixed(9) + '</south><east>' + gb.east.toFixed(9) + '</east><west>' + gb.west.toFixed(9) + '</west><rotation>' + gb.rot.toFixed(6) + '</rotation></LatLonBox>';
+      } else {        // skewed corners can only be expressed as Google's gx:LatLonQuad extension
+        geomXml = '<gx:LatLonQuad><coordinates>' + c4.map(function (q) { var v = llAlt(q); return v[0] + ',' + v[1]; }).join(' ') + '</coordinates></gx:LatLonQuad>';
+      }
       var alpha = Math.round(((f.imageOpacity != null && isFinite(f.imageOpacity)) ? f.imageOpacity : 1) * 255).toString(16);
       if (alpha.length < 2) alpha = '0' + alpha;
       out.push('  <GroundOverlay><name>' + xmlEsc(f.name) + '</name><visibility>' + (f.vis ? '1' : '0') + '</visibility><color>' + alpha + 'ffffff</color>' +
-        '<Icon><href>' + xmlEsc(groundPathMap[i]) + '</href></Icon><gx:LatLonQuad><coordinates>' + quad + '</coordinates></gx:LatLonQuad></GroundOverlay>');
+        '<Icon><href>' + xmlEsc(groundPathMap[i]) + '</href></Icon>' + geomXml + '</GroundOverlay>');
       continue;
     }
     var st = featureStyle(f), pts = [];
@@ -9866,7 +9883,7 @@ function resetSettingsSection(section, title) {
     'Elevation Range': ['zMin', 'zMax'],
     'Local Relief (micro-topo)': ['reliefWindow', 'reliefAmp'],
     'Tone': ['contrast', 'brightness', 'gamma', 'intensity', 'saturation'],
-    'Shading & Eye-Dome': ['sunAz', 'sunEl', 'hillshade', 'ambient', 'multi', 'edl', 'edlStrength', 'edlRadius'],
+    'Shading & Eye-Dome': ['sunAz', 'sunEl', 'sunIntensity', 'shadowContrast', 'sunColor', 'hillshade', 'ambient', 'multi', 'multiBlend', 'edl', 'edlStrength', 'edlRadius'],
     'Point Rendering': ['pointWorld', 'splatM', 'pointPx', 'opacity', 'fog'],
     'Background & Sky': ['sky', 'bgColor'],
     'Contours': ['contourInt', 'contourStr'],
